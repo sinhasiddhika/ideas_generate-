@@ -16,7 +16,7 @@ def analyze_input_pattern(image):
     
     return {
         'original_size': (h, w),
-        'tile_size': (min(h, w), min(h, w)),
+        'tile_size': (min(h, w), min(h, w)),  # Square tile for variations
         'half_size': (h//2, w//2),
         'quarter_size': (h//4, w//4) if h > 100 and w > 100 else (h//2, w//2)
     }
@@ -26,6 +26,7 @@ def create_pattern_variation_1_original(image, output_width, output_height):
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
+    # Pure tiling of original pattern
     tiles_x = (output_width + w - 1) // w
     tiles_y = (output_height + h - 1) // h
     
@@ -41,9 +42,11 @@ def create_pattern_variation_2_mirrored(image, output_width, output_height):
     """Variation 2: Mirrored Pattern - Creates symmetrical designs"""
     img_array = np.array(image)
     
+    # Create mirrored version
     mirrored_h = np.hstack([img_array, np.fliplr(img_array)])
     mirrored_full = np.vstack([mirrored_h, np.flipud(mirrored_h)])
     
+    # Tile this mirrored pattern
     mh, mw = mirrored_full.shape[:2]
     tiles_x = (output_width + mw - 1) // mw
     tiles_y = (output_height + mh - 1) // mh
@@ -60,20 +63,24 @@ def create_pattern_variation_3_rotated(image, output_width, output_height):
     """Variation 3: Rotated Pattern - Creates dynamic layouts"""
     img_array = np.array(image)
     
+    # Create 4-way rotated pattern
     img_pil = Image.fromarray(img_array)
     rot90 = np.array(img_pil.rotate(90, expand=True))
     rot180 = np.array(img_pil.rotate(180, expand=True))
     rot270 = np.array(img_pil.rotate(270, expand=True))
     
+    # Resize all to same dimensions
     h, w = img_array.shape[:2]
     rot90_resized = np.array(Image.fromarray(rot90).resize((w, h)))
     rot180_resized = np.array(Image.fromarray(rot180).resize((w, h)))
     rot270_resized = np.array(Image.fromarray(rot270).resize((w, h)))
     
+    # Combine in 2x2 grid
     top_row = np.hstack([img_array, rot90_resized])
     bottom_row = np.hstack([rot270_resized, rot180_resized])
     rotated_pattern = np.vstack([top_row, bottom_row])
     
+    # Tile this rotated pattern
     rh, rw = rotated_pattern.shape[:2]
     tiles_x = (output_width + rw - 1) // rw
     tiles_y = (output_height + rh - 1) // rh
@@ -87,292 +94,402 @@ def create_pattern_variation_3_rotated(image, output_width, output_height):
     return Image.fromarray(final_array), "4-Way Rotated"
 
 def create_pattern_variation_4_scaled(image, output_width, output_height):
-    """Variation 4: Multi-Scale Pattern - FIXED VERSION"""
+    """Variation 4: IMPROVED Multi-Scale Pattern - Better proportions and placement"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    # Create different scales
+    # Create different scales with better proportions
     img_pil = Image.fromarray(img_array)
-    large = np.array(img_pil.resize((w, h)))
-    medium = np.array(img_pil.resize((w//2, h//2)))
-    small = np.array(img_pil.resize((w//4, h//4)))
     
-    # Create base pattern with medium tiles
-    med_h, med_w = medium.shape[:2]
-    base_tiles_x = (output_width + med_w - 1) // med_w
-    base_tiles_y = (output_height + med_h - 1) // med_h
+    # Create a base pattern with the original size
+    base_pattern = img_array
     
-    # Create base canvas with medium pattern
-    if len(medium.shape) == 3:
-        base_pattern = np.tile(medium, (base_tiles_y, base_tiles_x, 1))
-    else:
-        base_pattern = np.tile(medium, (base_tiles_y, base_tiles_x))
+    # Create smaller versions for filling
+    small_size = max(w//4, h//4, 20)  # Ensure minimum size
+    medium_size = max(w//2, h//2, 40)  # Ensure minimum size
     
-    base_pattern = base_pattern[:output_height, :output_width]
+    small_pattern = np.array(img_pil.resize((small_size, small_size)))
+    medium_pattern = np.array(img_pil.resize((medium_size, medium_size)))
     
-    # Add large patterns strategically
-    spacing_h = h + h//2
-    spacing_w = w + w//2
+    # Create a repeating base with small patterns
+    small_tiles_x = (output_width + small_size - 1) // small_size
+    small_tiles_y = (output_height + small_size - 1) // small_size
     
-    for y_pos in range(0, output_height - h, spacing_h):
-        for x_pos in range(0, output_width - w, spacing_w):
-            end_y = min(y_pos + h, output_height)
-            end_x = min(x_pos + w, output_width)
-            base_pattern[y_pos:end_y, x_pos:end_x] = large[:end_y-y_pos, :end_x-x_pos]
+    # Create background with small tiles
+    background = np.tile(small_pattern, (small_tiles_y, small_tiles_x, 1))[:output_height, :output_width]
     
-    # Add small pattern details
-    small_h, small_w = small.shape[:2]
-    small_spacing = max(small_h * 3, small_w * 3)
+    # Overlay medium patterns at regular intervals
+    med_step_x = w
+    med_step_y = h
     
-    for y_pos in range(small_spacing//2, output_height - small_h, small_spacing):
-        for x_pos in range(small_spacing//2, output_width - small_w, small_spacing):
-            end_y = min(y_pos + small_h, output_height)
-            end_x = min(x_pos + small_w, output_width)
-            base_pattern[y_pos:end_y, x_pos:end_x] = small[:end_y-y_pos, :end_x-x_pos]
+    for y in range(0, output_height - medium_size, med_step_y):
+        for x in range(0, output_width - medium_size, med_step_x):
+            if y + medium_size <= output_height and x + medium_size <= output_width:
+                background[y:y+medium_size, x:x+medium_size] = medium_pattern
     
-    return Image.fromarray(base_pattern), "Multi-Scale Mix"
+    # Add some original size patterns as focal points
+    focal_step_x = w * 2
+    focal_step_y = h * 2
+    
+    for y in range(h//2, output_height - h, focal_step_y):
+        for x in range(w//2, output_width - w, focal_step_x):
+            if y + h <= output_height and x + w <= output_width:
+                background[y:y+h, x:x+w] = base_pattern
+    
+    return Image.fromarray(background), "Multi-Scale Mix"
 
 def create_pattern_variation_5_brick(image, output_width, output_height):
-    """Variation 5: Brick/Offset Pattern - Staggered layout"""
+    """Variation 5: IMPROVED Brick/Offset Pattern - Better offset calculation"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
+    # Create brick pattern with proper offset
     offset = w // 2
-    tiles_x = (output_width + w - 1) // w + 1
+    if offset == 0:
+        offset = max(1, w // 4)  # Ensure some offset
+    
+    # Calculate tiles needed
+    tiles_x = (output_width + w - 1) // w + 2  # Extra tiles for offset
     tiles_y = (output_height + h - 1) // h
     
-    canvas_h = tiles_y * h
-    canvas_w = tiles_x * w + offset
+    # Create canvas
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((canvas_h, canvas_w), dtype=np.uint8)
-    
+    # Fill with brick pattern
     for row in range(tiles_y):
+        y_pos = row * h
+        if y_pos >= output_height:
+            break
+            
         for col in range(tiles_x):
-            y_pos = row * h
             x_pos = col * w
             
+            # Apply offset to odd rows
             if row % 2 == 1:
-                x_pos += offset
+                x_pos -= offset
             
-            if y_pos + h <= canvas_h and x_pos + w <= canvas_w:
-                canvas[y_pos:y_pos+h, x_pos:x_pos+w] = img_array
+            # Check boundaries and place tile
+            if x_pos < output_width and y_pos < output_height:
+                # Calculate actual placement area
+                end_y = min(y_pos + h, output_height)
+                end_x = min(x_pos + w, output_width)
+                
+                if x_pos >= 0:  # Only place if not negative
+                    tile_h = end_y - y_pos
+                    tile_w = end_x - x_pos
+                    canvas[y_pos:end_y, x_pos:end_x] = img_array[:tile_h, :tile_w]
+                elif x_pos + w > 0:  # Partial tile on left edge
+                    start_x_tile = -x_pos
+                    tile_w = end_x
+                    tile_h = end_y - y_pos
+                    canvas[y_pos:end_y, 0:tile_w] = img_array[:tile_h, start_x_tile:start_x_tile + tile_w]
     
-    final_array = canvas[:output_height, :output_width]
-    return Image.fromarray(final_array), "Brick/Offset Layout"
+    return Image.fromarray(canvas), "Brick/Offset Layout"
 
 def create_pattern_variation_6_diagonal(image, output_width, output_height):
-    """Variation 6: Diagonal Pattern - 45-degree arrangement"""
+    """Variation 6: IMPROVED Diagonal Pattern - Better diamond arrangement"""
     img_array = np.array(image)
+    h, w = img_array.shape[:2]
+    
+    # Create diamond/diagonal pattern
     img_pil = Image.fromarray(img_array)
     
-    diagonal_img = img_pil.rotate(45, expand=True, fillcolor=(128, 128, 128))
-    diag_array = np.array(diagonal_img)
-    dh, dw = diag_array.shape[:2]
+    # Create a diamond-shaped arrangement
+    # Calculate diagonal spacing
+    diag_spacing_x = int(w * 0.8)
+    diag_spacing_y = int(h * 0.8)
     
-    tiles_x = (output_width + dw - 1) // dw
-    tiles_y = (output_height + dh - 1) // dh
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    if len(diag_array.shape) == 3:
-        tiled_array = np.tile(diag_array, (tiles_y, tiles_x, 1))
-    else:
-        tiled_array = np.tile(diag_array, (tiles_y, tiles_x))
+    # Create diagonal grid
+    for row in range(-2, (output_height // diag_spacing_y) + 3):
+        for col in range(-2, (output_width // diag_spacing_x) + 3):
+            # Calculate position with diagonal offset
+            if row % 2 == 0:
+                x_pos = col * diag_spacing_x
+            else:
+                x_pos = col * diag_spacing_x + diag_spacing_x // 2
+            
+            y_pos = row * diag_spacing_y
+            
+            # Place pattern if within bounds
+            if (x_pos + w > 0 and x_pos < output_width and 
+                y_pos + h > 0 and y_pos < output_height):
+                
+                # Calculate clipping
+                start_x = max(0, x_pos)
+                start_y = max(0, y_pos)
+                end_x = min(output_width, x_pos + w)
+                end_y = min(output_height, y_pos + h)
+                
+                # Calculate source clipping
+                src_start_x = max(0, -x_pos)
+                src_start_y = max(0, -y_pos)
+                src_end_x = src_start_x + (end_x - start_x)
+                src_end_y = src_start_y + (end_y - start_y)
+                
+                canvas[start_y:end_y, start_x:end_x] = img_array[src_start_y:src_end_y, src_start_x:src_end_x]
     
-    final_array = tiled_array[:output_height, :output_width]
-    return Image.fromarray(final_array), "Diagonal Layout"
+    return Image.fromarray(canvas), "Diagonal Diamond"
 
 def create_pattern_variation_7_hexagonal(image, output_width, output_height):
     """Variation 7: Hexagonal/Honeycomb Pattern"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    # Create hexagonal offset pattern
-    hex_offset_x = w * 3 // 4
-    hex_offset_y = h * 2 // 3
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((output_height, output_width), dtype=np.uint8)
+    # Hexagonal spacing
+    hex_width = w * 0.75
+    hex_height = h * 0.87  # sqrt(3)/2 for proper hex spacing
     
     row = 0
     y_pos = 0
     while y_pos < output_height:
         col = 0
-        x_pos = 0 if row % 2 == 0 else hex_offset_x // 2
+        x_pos = 0
+        
+        # Offset every other row for hex pattern
+        if row % 2 == 1:
+            x_pos = hex_width / 2
         
         while x_pos < output_width:
-            end_y = min(y_pos + h, output_height)
-            end_x = min(x_pos + w, output_width)
+            # Place pattern
+            start_x = max(0, int(x_pos))
+            start_y = max(0, int(y_pos))
+            end_x = min(output_width, int(x_pos) + w)
+            end_y = min(output_height, int(y_pos) + h)
             
-            canvas[y_pos:end_y, x_pos:end_x] = img_array[:end_y-y_pos, :end_x-x_pos]
+            if start_x < end_x and start_y < end_y:
+                src_w = end_x - start_x
+                src_h = end_y - start_y
+                canvas[start_y:end_y, start_x:end_x] = img_array[:src_h, :src_w]
             
-            x_pos += hex_offset_x
+            x_pos += hex_width
             col += 1
         
-        y_pos += hex_offset_y
+        y_pos += hex_height
         row += 1
     
-    return Image.fromarray(canvas), "Hexagonal Layout"
+    return Image.fromarray(canvas), "Hexagonal Grid"
 
-def create_pattern_variation_8_radial(image, output_width, output_height):
-    """Variation 8: Radial/Circular Pattern"""
+def create_pattern_variation_8_circular(image, output_width, output_height):
+    """Variation 8: Circular/Radial Pattern"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    # Create multiple rotated versions
-    img_pil = Image.fromarray(img_array)
-    angles = [0, 60, 120, 180, 240, 300]
-    rotated_versions = []
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    for angle in angles:
-        rotated = img_pil.rotate(angle, expand=False)
-        rotated_versions.append(np.array(rotated))
-    
-    # Create radial pattern
+    # Create circular arrangement
     center_x, center_y = output_width // 2, output_height // 2
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((output_height, output_width), dtype=np.uint8)
-    
-    # Place patterns in radial arrangement
     radius_step = max(w, h)
-    for radius in range(0, max(output_width, output_height), radius_step):
-        angle_count = max(6, (2 * np.pi * radius) // max(w, h))
-        for i in range(int(angle_count)):
-            angle = 2 * np.pi * i / angle_count
-            x = int(center_x + radius * np.cos(angle) - w//2)
-            y = int(center_y + radius * np.sin(angle) - h//2)
-            
-            if 0 <= x < output_width - w and 0 <= y < output_height - h:
-                pattern_idx = i % len(rotated_versions)
-                canvas[y:y+h, x:x+w] = rotated_versions[pattern_idx]
     
-    return Image.fromarray(canvas), "Radial Layout"
+    for radius in range(radius_step, max(output_width, output_height), radius_step):
+        # Calculate number of patterns for this radius
+        circumference = 2 * np.pi * radius
+        num_patterns = max(1, int(circumference // max(w, h)))
+        
+        for i in range(num_patterns):
+            angle = (2 * np.pi * i) / num_patterns
+            x_pos = int(center_x + radius * np.cos(angle) - w // 2)
+            y_pos = int(center_y + radius * np.sin(angle) - h // 2)
+            
+            # Place pattern if within bounds
+            if (x_pos + w > 0 and x_pos < output_width and 
+                y_pos + h > 0 and y_pos < output_height):
+                
+                start_x = max(0, x_pos)
+                start_y = max(0, y_pos)
+                end_x = min(output_width, x_pos + w)
+                end_y = min(output_height, y_pos + h)
+                
+                src_start_x = max(0, -x_pos)
+                src_start_y = max(0, -y_pos)
+                src_end_x = src_start_x + (end_x - start_x)
+                src_end_y = src_start_y + (end_y - start_y)
+                
+                canvas[start_y:end_y, start_x:end_x] = img_array[src_start_y:src_end_y, src_start_x:src_end_x]
+    
+    return Image.fromarray(canvas), "Circular Radial"
 
 def create_pattern_variation_9_wave(image, output_width, output_height):
-    """Variation 9: Wave/Sine Pattern"""
+    """Variation 9: Wave/Sinusoidal Pattern"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((output_height, output_width), dtype=np.uint8)
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    # Create wave pattern
+    # Wave parameters
     wave_amplitude = h // 2
     wave_frequency = 2 * np.pi / (w * 3)
     
-    for row in range(0, output_height, h):
-        for col in range(0, output_width, w):
+    # Create wave pattern
+    for col in range(0, output_width, w // 2):
+        for row in range(0, output_height, h):
             # Calculate wave offset
             wave_offset = int(wave_amplitude * np.sin(wave_frequency * col))
             
-            y_pos = row + wave_offset
             x_pos = col
+            y_pos = row + wave_offset
             
-            # Ensure within bounds
-            if 0 <= y_pos < output_height - h and 0 <= x_pos < output_width - w:
-                canvas[y_pos:y_pos+h, x_pos:x_pos+w] = img_array
+            # Place pattern
+            if (x_pos + w > 0 and x_pos < output_width and 
+                y_pos + h > 0 and y_pos < output_height):
+                
+                start_x = max(0, x_pos)
+                start_y = max(0, y_pos)
+                end_x = min(output_width, x_pos + w)
+                end_y = min(output_height, y_pos + h)
+                
+                if start_x < end_x and start_y < end_y:
+                    src_w = end_x - start_x
+                    src_h = end_y - start_y
+                    canvas[start_y:end_y, start_x:end_x] = img_array[:src_h, :src_w]
     
     return Image.fromarray(canvas), "Wave Pattern"
 
-def create_pattern_variation_10_spiral(image, output_width, output_height):
-    """Variation 10: Spiral Pattern"""
+def create_pattern_variation_10_scattered(image, output_width, output_height):
+    """Variation 10: Random Scattered Pattern"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((output_height, output_width), dtype=np.uint8)
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    # Create spiral
-    center_x, center_y = output_width // 2, output_height // 2
-    max_radius = min(output_width, output_height) // 2
+    # Create base tiling first
+    base_tiles_x = (output_width + w*2 - 1) // (w*2)
+    base_tiles_y = (output_height + h*2 - 1) // (h*2)
     
-    for angle in np.arange(0, 8 * np.pi, 0.3):
-        radius = (angle / (8 * np.pi)) * max_radius
-        x = int(center_x + radius * np.cos(angle) - w//2)
-        y = int(center_y + radius * np.sin(angle) - h//2)
-        
-        if 0 <= x < output_width - w and 0 <= y < output_height - h:
-            # Rotate pattern based on angle
-            rotation_angle = angle * 180 / np.pi
-            rotated_img = Image.fromarray(img_array).rotate(rotation_angle, expand=False)
-            rotated_array = np.array(rotated_img)
-            canvas[y:y+h, x:x+w] = rotated_array
+    # Set random seed for reproducible results
+    np.random.seed(42)
     
-    return Image.fromarray(canvas), "Spiral Layout"
+    # Place base patterns with some randomness
+    for row in range(base_tiles_y):
+        for col in range(base_tiles_x):
+            # Add random offset
+            random_offset_x = np.random.randint(-w//4, w//4)
+            random_offset_y = np.random.randint(-h//4, h//4)
+            
+            x_pos = col * w*2 + random_offset_x
+            y_pos = row * h*2 + random_offset_y
+            
+            # Place pattern
+            if (x_pos + w > 0 and x_pos < output_width and 
+                y_pos + h > 0 and y_pos < output_height):
+                
+                start_x = max(0, x_pos)
+                start_y = max(0, y_pos)
+                end_x = min(output_width, x_pos + w)
+                end_y = min(output_height, y_pos + h)
+                
+                if start_x < end_x and start_y < end_y:
+                    src_start_x = max(0, -x_pos)
+                    src_start_y = max(0, -y_pos)
+                    src_end_x = src_start_x + (end_x - start_x)
+                    src_end_y = src_start_y + (end_y - start_y)
+                    
+                    canvas[start_y:end_y, start_x:end_x] = img_array[src_start_y:src_end_y, src_start_x:src_end_x]
+    
+    return Image.fromarray(canvas), "Random Scattered"
 
-def create_pattern_variation_11_checkerboard(image, output_width, output_height):
-    """Variation 11: Checkerboard with Alternating Patterns"""
+def create_pattern_variation_11_chevron(image, output_width, output_height):
+    """Variation 11: Chevron/Zigzag Pattern"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    # Create inverted/modified version
-    img_pil = Image.fromarray(img_array)
-    inverted = ImageOps.invert(img_pil) if img_pil.mode == 'RGB' else img_pil.rotate(180)
-    inverted_array = np.array(inverted)
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((output_height, output_width), dtype=np.uint8)
+    # Create chevron pattern
+    row_height = h
+    chevron_width = w
     
-    # Create checkerboard pattern
-    for row in range(0, output_height, h):
-        for col in range(0, output_width, w):
-            # Determine which pattern to use
-            tile_row = row // h
-            tile_col = col // w
-            use_original = (tile_row + tile_col) % 2 == 0
+    for row in range(0, output_height, row_height):
+        for col in range(0, output_width + chevron_width, chevron_width):
+            # Determine if this is a "peak" or "valley" row
+            row_index = row // row_height
             
-            pattern = img_array if use_original else inverted_array
+            if row_index % 2 == 0:
+                # Normal placement
+                x_pos = col
+            else:
+                # Offset for chevron effect
+                x_pos = col - chevron_width // 2
             
-            end_row = min(row + h, output_height)
-            end_col = min(col + w, output_width)
+            y_pos = row
             
-            canvas[row:end_row, col:end_col] = pattern[:end_row-row, :end_col-col]
+            # Place pattern
+            if (x_pos + w > 0 and x_pos < output_width and 
+                y_pos + h > 0 and y_pos < output_height):
+                
+                start_x = max(0, x_pos)
+                start_y = max(0, y_pos)
+                end_x = min(output_width, x_pos + w)
+                end_y = min(output_height, y_pos + h)
+                
+                if start_x < end_x and start_y < end_y:
+                    src_start_x = max(0, -x_pos)
+                    src_start_y = max(0, -y_pos)
+                    src_end_x = src_start_x + (end_x - start_x)
+                    src_end_y = src_start_y + (end_y - start_y)
+                    
+                    canvas[start_y:end_y, start_x:end_x] = img_array[src_start_y:src_end_y, src_start_x:src_end_x]
     
-    return Image.fromarray(canvas), "Checkerboard Pattern"
+    return Image.fromarray(canvas), "Chevron Zigzag"
 
 def create_pattern_variation_12_kaleidoscope(image, output_width, output_height):
-    """Variation 12: Kaleidoscope Pattern"""
+    """Variation 12: Kaleidoscope/Mandala Pattern"""
     img_array = np.array(image)
     h, w = img_array.shape[:2]
     
-    # Create kaleidoscope effect
+    # Create a kaleidoscope effect
     img_pil = Image.fromarray(img_array)
     
-    # Create 8 rotated versions
-    rotations = []
-    for angle in range(0, 360, 45):
-        rotated = img_pil.rotate(angle, expand=False)
-        rotations.append(np.array(rotated))
+    # Create multiple rotations
+    rotations = [0, 60, 120, 180, 240, 300]
+    patterns = []
     
-    # Create pattern with different rotations
-    if len(img_array.shape) == 3:
-        canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-    else:
-        canvas = np.zeros((output_height, output_width), dtype=np.uint8)
+    for angle in rotations:
+        rotated = img_pil.rotate(angle, expand=True)
+        patterns.append(np.array(rotated))
     
-    rotation_idx = 0
-    for row in range(0, output_height, h):
-        for col in range(0, output_width, w):
-            end_row = min(row + h, output_height)
-            end_col = min(col + w, output_width)
+    # Create kaleidoscope arrangement
+    canvas = np.zeros((output_height, output_width, 3), dtype=np.uint8)
+    
+    # Place patterns in a kaleidoscope arrangement
+    center_x, center_y = output_width // 2, output_height // 2
+    
+    for i, pattern in enumerate(patterns):
+        ph, pw = pattern.shape[:2]
+        
+        # Calculate position for each rotated pattern
+        angle_rad = np.radians(rotations[i])
+        
+        # Place multiple copies at different radii
+        for radius in range(0, min(output_width, output_height) // 2, max(w, h)):
+            if radius == 0:
+                x_pos = center_x - pw // 2
+                y_pos = center_y - ph // 2
+            else:
+                x_pos = int(center_x + radius * np.cos(angle_rad) - pw // 2)
+                y_pos = int(center_y + radius * np.sin(angle_rad) - ph // 2)
             
-            pattern = rotations[rotation_idx % len(rotations)]
-            canvas[row:end_row, col:end_col] = pattern[:end_row-row, :end_col-col]
-            
-            rotation_idx += 1
+            # Place pattern
+            if (x_pos + pw > 0 and x_pos < output_width and 
+                y_pos + ph > 0 and y_pos < output_height):
+                
+                start_x = max(0, x_pos)
+                start_y = max(0, y_pos)
+                end_x = min(output_width, x_pos + pw)
+                end_y = min(output_height, y_pos + ph)
+                
+                if start_x < end_x and start_y < end_y:
+                    src_start_x = max(0, -x_pos)
+                    src_start_y = max(0, -y_pos)
+                    src_end_x = src_start_x + (end_x - start_x)
+                    src_end_y = src_start_y + (end_y - start_y)
+                    
+                    canvas[start_y:end_y, start_x:end_x] = pattern[src_start_y:src_end_y, src_start_x:src_end_x]
     
-    return Image.fromarray(canvas), "Kaleidoscope Pattern"
+    return Image.fromarray(canvas), "Kaleidoscope Mandala"
 
 def generate_all_pattern_variations(original_image, output_width, output_height):
     """Generate all 12 pattern variations"""
@@ -380,18 +497,41 @@ def generate_all_pattern_variations(original_image, output_width, output_height)
     
     try:
         # Generate each variation
-        variations.append(create_pattern_variation_1_original(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_2_mirrored(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_3_rotated(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_4_scaled(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_5_brick(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_6_diagonal(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_7_hexagonal(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_8_radial(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_9_wave(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_10_spiral(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_11_checkerboard(original_image, output_width, output_height))
-        variations.append(create_pattern_variation_12_kaleidoscope(original_image, output_width, output_height))
+        var1, name1 = create_pattern_variation_1_original(original_image, output_width, output_height)
+        variations.append((var1, name1))
+        
+        var2, name2 = create_pattern_variation_2_mirrored(original_image, output_width, output_height)
+        variations.append((var2, name2))
+        
+        var3, name3 = create_pattern_variation_3_rotated(original_image, output_width, output_height)
+        variations.append((var3, name3))
+        
+        var4, name4 = create_pattern_variation_4_scaled(original_image, output_width, output_height)
+        variations.append((var4, name4))
+        
+        var5, name5 = create_pattern_variation_5_brick(original_image, output_width, output_height)
+        variations.append((var5, name5))
+        
+        var6, name6 = create_pattern_variation_6_diagonal(original_image, output_width, output_height)
+        variations.append((var6, name6))
+        
+        var7, name7 = create_pattern_variation_7_hexagonal(original_image, output_width, output_height)
+        variations.append((var7, name7))
+        
+        var8, name8 = create_pattern_variation_8_circular(original_image, output_width, output_height)
+        variations.append((var8, name8))
+        
+        var9, name9 = create_pattern_variation_9_wave(original_image, output_width, output_height)
+        variations.append((var9, name9))
+        
+        var10, name10 = create_pattern_variation_10_scattered(original_image, output_width, output_height)
+        variations.append((var10, name10))
+        
+        var11, name11 = create_pattern_variation_11_chevron(original_image, output_width, output_height)
+        variations.append((var11, name11))
+        
+        var12, name12 = create_pattern_variation_12_kaleidoscope(original_image, output_width, output_height)
+        variations.append((var12, name12))
         
     except Exception as e:
         st.error(f"Error generating variations: {e}")
@@ -412,7 +552,7 @@ def get_download_link(img, filename):
 
 def main():
     st.set_page_config(
-        page_title="Advanced Multi-Pattern Carpet Generator",
+        page_title="Ultimate Pattern Carpet Generator",
         page_icon="🎨",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -444,13 +584,19 @@ def main():
         border: 2px solid #e9ecef;
         margin: 10px 0;
     }
+    .pattern-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+    }
     </style>
     """, unsafe_allow_html=True)
     
     # Header
     st.markdown("""
     <div class="main-header">
-        <h1>🎨 Advanced Multi-Pattern Carpet Generator</h1>
+        <h1>🎨 Ultimate Pattern Carpet Generator</h1>
         <p>Create 12 different carpet patterns from your single input image!</p>
     </div>
     """, unsafe_allow_html=True)
@@ -498,15 +644,15 @@ def main():
         1. **Original** - Direct tiling
         2. **Mirrored** - Symmetrical design
         3. **4-Way Rotated** - Dynamic layout
-        4. **Multi-Scale** - Different sizes mixed (FIXED!)
-        5. **Brick/Offset** - Staggered arrangement
-        6. **Diagonal** - 45-degree layout
-        7. **Hexagonal** - Honeycomb pattern
-        8. **Radial** - Circular arrangement
-        9. **Wave** - Sine wave pattern
-        10. **Spiral** - Spiral layout
-        11. **Checkerboard** - Alternating patterns
-        12. **Kaleidoscope** - Multi-rotation effect
+        4. **Multi-Scale** - Improved size mixing
+        5. **Brick/Offset** - Enhanced staggered layout
+        6. **Diagonal Diamond** - Improved diagonal
+        7. **Hexagonal Grid** - Honeycomb pattern
+        8. **Circular Radial** - Radial arrangement
+        9. **Wave Pattern** - Sinusoidal flow
+        10. **Random Scattered** - Organic placement
+        11. **Chevron Zigzag** - Angular design
+        12. **Kaleidoscope** - Mandala-like pattern
         """)
     
     # Main content
@@ -546,7 +692,7 @@ def main():
                             st.success("✅ Generated 12 unique pattern variations!")
                             
                             # Display all variations
-                            st.subheader("✨ All Pattern Variations")
+                            st.subheader("✨ All 12 Pattern Variations")
                             
                             # Display in 3 columns, 4 rows
                             for i in range(0, len(variations), 3):
@@ -559,7 +705,7 @@ def main():
                                         st.markdown(f'<div class="pattern-card">', unsafe_allow_html=True)
                                         st.write(f"**{i+1}. {pattern_name}**")
                                         st.image(pattern_img, use_column_width=True)
-                                        st.markdown(get_download_link(pattern_img, f"pattern_{i+1}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
+                                        st.markdown(get_download_link(pattern_img, f"pattern_{i+1:02d}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
                                         st.markdown('</div>', unsafe_allow_html=True)
                                 
                                 # Second pattern
@@ -569,7 +715,7 @@ def main():
                                         st.markdown(f'<div class="pattern-card">', unsafe_allow_html=True)
                                         st.write(f"**{i+2}. {pattern_name}**")
                                         st.image(pattern_img, use_column_width=True)
-                                        st.markdown(get_download_link(pattern_img, f"pattern_{i+2}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
+                                        st.markdown(get_download_link(pattern_img, f"pattern_{i+2:02d}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
                                         st.markdown('</div>', unsafe_allow_html=True)
                                 
                                 # Third pattern
@@ -579,15 +725,40 @@ def main():
                                         st.markdown(f'<div class="pattern-card">', unsafe_allow_html=True)
                                         st.write(f"**{i+3}. {pattern_name}**")
                                         st.image(pattern_img, use_column_width=True)
-                                        st.markdown(get_download_link(pattern_img, f"pattern_{i+3}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
+                                        st.markdown(get_download_link(pattern_img, f"pattern_{i+3:02d}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
                                         st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Bulk download section
+                            # Enhanced download section
                             st.subheader("📥 Download All Patterns")
+                            st.markdown("**Quick Download Links:**")
+                            
+                            # Create download grid
                             download_cols = st.columns(4)
                             for i, (pattern_img, pattern_name) in enumerate(variations):
                                 with download_cols[i % 4]:
-                                    st.markdown(get_download_link(pattern_img, f"variation_{i+1}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
+                                    st.markdown(get_download_link(pattern_img, f"variation_{i+1:02d}_{pattern_name.lower().replace(' ', '_').replace('/', '_')}.png"), unsafe_allow_html=True)
+                            
+                            # Pattern analysis
+                            st.subheader("🔍 Pattern Analysis")
+                            analysis_col1, analysis_col2 = st.columns(2)
+                            
+                            with analysis_col1:
+                                st.markdown("**Best for Different Spaces:**")
+                                st.markdown("""
+                                - **Living Room**: Original, Mirrored, Multi-Scale
+                                - **Bedroom**: Wave, Scattered, Circular
+                                - **Modern Spaces**: Hexagonal, Chevron, Kaleidoscope
+                                - **Traditional**: Brick/Offset, 4-Way Rotated
+                                """)
+                            
+                            with analysis_col2:
+                                st.markdown("**Pattern Characteristics:**")
+                                st.markdown("""
+                                - **High Symmetry**: Mirrored, Kaleidoscope, Hexagonal
+                                - **Dynamic Flow**: Wave, Circular, Chevron
+                                - **Organic Feel**: Scattered, Multi-Scale
+                                - **Geometric**: Brick, Diagonal, 4-Way Rotated
+                                """)
                             
                             if preview_mode:
                                 st.info("👆 Preview mode active. Uncheck for full resolution.")
@@ -601,30 +772,73 @@ def main():
         st.info("👆 Upload a pattern to generate 12 different variations!")
         
         st.subheader("🎨 Pattern Variations Preview")
-        st.markdown("""
-        **What you'll get from your input:**
         
-        1. **Original Pattern** - Clean direct tiling of your input
-        2. **Mirrored Symmetry** - Creates beautiful symmetrical designs
-        3. **4-Way Rotated** - Dynamic layout with 90° rotations
-        4. **Multi-Scale Mix** - Different sizes combined artistically (FIXED - no more blank spaces!)
-        5. **Brick/Offset Layout** - Staggered arrangement like brickwork
-        6. **Diagonal Layout** - 45-degree rotated arrangement
-        7. **Hexagonal Layout** - Honeycomb-style pattern arrangement
-        8. **Radial Layout** - Circular/radial pattern distribution
-        9. **Wave Pattern** - Sine wave-based flowing arrangement
-        10. **Spiral Layout** - Spiral-based pattern placement
-        11. **Checkerboard Pattern** - Alternating original/inverted tiles
-        12. **Kaleidoscope Pattern** - Multi-rotation kaleidoscope effect
+        # Create tabs for better organization
+        tab1, tab2, tab3 = st.tabs(["📋 Pattern List", "🎯 Use Cases", "💡 Tips"])
         
-        **Perfect for:**
-        - Choosing the best layout for your space
-        - Seeing different aesthetic options
-        - Creating unique carpet designs
-        - Exploring creative possibilities
-        - Professional carpet design presentations
-        - Interior design projects
-        """)
+        with tab1:
+            st.markdown("""
+            **Complete Pattern Collection (12 Variations):**
+            
+            **Basic Patterns:**
+            1. **Original Pattern** - Clean direct tiling
+            2. **Mirrored Symmetry** - Four-way mirror reflection
+            3. **4-Way Rotated** - 90° rotational arrangement
+            
+            **Enhanced Patterns:**
+            4. **Multi-Scale Mix** - Improved size combinations
+            5. **Brick/Offset Layout** - Enhanced staggered pattern
+            6. **Diagonal Diamond** - Improved diagonal arrangement
+            
+            **Advanced Patterns:**
+            7. **Hexagonal Grid** - Honeycomb-style layout
+            8. **Circular Radial** - Radial/concentric arrangement
+            9. **Wave Pattern** - Sinusoidal flow design
+            10. **Random Scattered** - Organic, natural placement
+            11. **Chevron Zigzag** - Angular, dynamic design
+            12. **Kaleidoscope Mandala** - Complex symmetrical pattern
+            """)
+        
+        with tab2:
+            st.markdown("""
+            **Perfect Applications:**
+            
+            **Living Spaces:**
+            - **Living Room**: Original, Mirrored, Multi-Scale, Circular
+            - **Bedroom**: Wave, Scattered, Kaleidoscope (calming effects)
+            - **Dining Room**: Hexagonal, Brick/Offset (structured feel)
+            - **Study/Office**: Chevron, 4-Way Rotated (energizing)
+            
+            **Style Matching:**
+            - **Modern/Contemporary**: Hexagonal, Circular, Wave
+            - **Traditional**: Brick/Offset, Original, Mirrored
+            - **Bohemian**: Scattered, Kaleidoscope, Wave
+            - **Minimalist**: Original, Diagonal, 4-Way Rotated
+            - **Eclectic**: Multi-Scale, Chevron, Circular
+            """)
+        
+        with tab3:
+            st.markdown("""
+            **Pro Tips for Best Results:**
+            
+            **Input Pattern Tips:**
+            - Use high-contrast patterns for better visibility
+            - Square patterns work best for most variations
+            - Avoid very small details that might get lost
+            - Consider how your pattern will look when repeated
+            
+            **Size Recommendations:**
+            - **Preview Mode**: Great for testing different patterns
+            - **Small Rugs**: Perfect for accent pieces
+            - **Large Rugs**: Better for main room carpets
+            - **Room Size**: For wall-to-wall coverage
+            
+            **Pattern Selection:**
+            - **High Traffic Areas**: Use simpler patterns (Original, Mirrored)
+            - **Accent Areas**: Try complex patterns (Kaleidoscope, Circular)
+            - **Large Spaces**: Multi-Scale and Scattered work well
+            - **Small Spaces**: Avoid overly busy patterns
+            """)
 
 if __name__ == "__main__":
     main()
